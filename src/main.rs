@@ -16,12 +16,10 @@ pub fn genaddress() -> Address {
     let private_key: [u8; 32] = rng.gen();
     let secret_key = SecretKey::from_slice(&private_key).expect("Unable to parse the secret key");
 
-    // 根据私钥计算公钥
     let secp: Secp256k1<secp256k1::All> = Secp256k1::new();
     let public_key = PublicKey::from_secret_key(&secp, &secret_key);
     let public_key_serialized = public_key.serialize_uncompressed();
 
-    // 计算以太坊地址
     let public_key_hash = Keccak256::digest(&public_key_serialized[1..]);
     let address = &public_key_hash[12..];
 
@@ -54,7 +52,7 @@ fn main() {
                     }
 
                     count_clone.fetch_add(1, Ordering::SeqCst);
-                    if count_clone.load(Ordering::SeqCst) % 1000000 == 0 {
+                    if count_clone.load(Ordering::Relaxed) % 1000000 == 0 {
                         println!("count: {}", count_clone.load(Ordering::SeqCst));
                     }
                 }
