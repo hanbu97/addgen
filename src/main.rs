@@ -1,9 +1,19 @@
 use std::sync::{atomic::AtomicU64, Arc};
 
 use core::sync::atomic::Ordering;
+use packed_simd::u8x32;
 use rand::Rng;
 use secp256k1::{PublicKey, Secp256k1, SecretKey};
 use sha3::{Digest, Keccak256};
+
+fn check_leading_zeros_simd(addresses: &[Vec<u8>], leading_zeros_half: usize) -> bool {
+    for addr in addresses {
+        if addr.iter().take(leading_zeros_half).all(|&x| x == 0) {
+            return true;
+        }
+    }
+    false
+}
 
 #[derive(Debug)]
 pub struct Address {
@@ -35,7 +45,7 @@ fn main() {
     let threads = num_cpus::get();
     let core_ids = core_affinity::get_core_ids().unwrap();
 
-    let leading_zeros_half = 4;
+    let leading_zeros_half = 3;
 
     crossbeam::thread::scope(|s| {
         for i in 0..threads {
@@ -45,18 +55,33 @@ fn main() {
             s.spawn(move |_| {
                 core_affinity::set_for_current(core_id);
                 let mut rng = rand::thread_rng();
+                let mut address_batch = Vec::new();
+                let mut prev_batch = Vec::new();
 
                 loop {
                     let address = genaddress(&mut rng);
-                    if address
-                        .address
-                        .iter()
-                        .take(leading_zeros_half)
-                        .all(|&x| x == 0)
-                    {
-                        println!("Address: 0x{}", hex::encode(&address.address));
-                        println!("Private key: {:?}", hex::encode(&address.private_key));
-                        std::process::exit(0);
+                    address_batch.push(address.address.clone());
+                    prev_batch.push(address.private_key.clone());
+
+                    if address_batch.len() == 32 {
+                        if check_leading_zeros_simd(&address_batch, leading_zeros_half) {
+                            for (addr, prev) in address_batch.iter().zip(prev_batch) {
+                                if addr.iter().take(leading_zeros_half).all(|&x| x == 0) {
+                                    println!("Address: 0x{}", hex::encode(&addr));
+                                    println!("Private key: {:?}", hex::encode(&prev));
+                                }
+                            }
+                            std::process::exit(0);
+                            // for addr in &address_batch {
+                            //     println!("Address: 0x{}", hex::encode(addr));
+                            // }
+                        }
+                        address_batch.clear();
+                    }
+
+                    count_clone.fetch_add(1, Ordering::SeqCst);
+                    if count_clone.load(Ordering::Relaxed) % 1000000 == 0 {
+                        println!("count: {}", count_clone.load(Ordering::SeqCst));
                     }
 
                     count_clone.fetch_add(1, Ordering::SeqCst);
@@ -68,9 +93,4 @@ fn main() {
         }
     })
     .unwrap();
-}
-
-#[test]
-fn test_num_cpus() {
-    println!("num_cpus: {}", num_cpus::get());
 }
