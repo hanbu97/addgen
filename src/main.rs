@@ -11,8 +11,7 @@ pub struct Address {
     pub private_key: Vec<u8>,
 }
 
-pub fn genaddress() -> Address {
-    let mut rng = rand::thread_rng();
+pub fn genaddress(rng: &mut impl Rng) -> Address {
     let private_key: [u8; 32] = rng.gen();
     let secret_key = SecretKey::from_slice(&private_key).expect("Unable to parse the secret key");
 
@@ -36,7 +35,7 @@ fn main() {
     let threads = num_cpus::get();
     let core_ids = core_affinity::get_core_ids().unwrap();
 
-    let leading_zeros_half = 3;
+    let leading_zeros_half = 4;
 
     crossbeam::thread::scope(|s| {
         for i in 0..threads {
@@ -45,8 +44,10 @@ fn main() {
 
             s.spawn(move |_| {
                 core_affinity::set_for_current(core_id);
+                let mut rng = rand::thread_rng();
+
                 loop {
-                    let address = genaddress();
+                    let address = genaddress(&mut rng);
                     if address
                         .address
                         .iter()
