@@ -7,8 +7,8 @@ use sha3::{Digest, Keccak256};
 
 #[derive(Debug)]
 pub struct Address {
-    pub address: String,
-    pub private_key: String,
+    pub address: Vec<u8>,
+    pub private_key: Vec<u8>,
 }
 
 pub fn genaddress() -> Address {
@@ -24,8 +24,8 @@ pub fn genaddress() -> Address {
     let address = &public_key_hash[12..];
 
     Address {
-        address: hex::encode(address),
-        private_key: hex::encode(private_key),
+        address: address.to_vec(),
+        private_key: private_key.to_vec(),
     }
 }
 
@@ -36,6 +36,8 @@ fn main() {
     let threads = num_cpus::get();
     let core_ids = core_affinity::get_core_ids().unwrap();
 
+    let leading_zeros_half = 3;
+
     crossbeam::thread::scope(|s| {
         for i in 0..threads {
             let count_clone = Arc::clone(&count);
@@ -45,9 +47,14 @@ fn main() {
                 core_affinity::set_for_current(core_id);
                 loop {
                     let address = genaddress();
-                    if address.address.starts_with("00000000") {
-                        println!("Address: 0x{}", address.address);
-                        println!("Private key: {:?}", address.private_key);
+                    if address
+                        .address
+                        .iter()
+                        .take(leading_zeros_half)
+                        .all(|&x| x == 0)
+                    {
+                        println!("Address: 0x{}", hex::encode(&address.address));
+                        println!("Private key: {:?}", hex::encode(&address.private_key));
                         std::process::exit(0);
                     }
 
